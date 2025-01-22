@@ -35,8 +35,8 @@ with Diagram("AWS EKS Cluster", show=False):
 
     # Docker image build processes
     with Cluster("Docker Hub"):
-        docker_image_frontend = Docker("Frontend Image")
-        docker_image_backend = Docker("Backend Image")
+        docker_image_frontend = Docker("Frontend Image (Nginx)")
+        docker_image_backend = Docker("Backend Image (Python)")
         docker_image_stt = Docker("Whisper Image")
         docker_image_translate = Docker("Libretranslate Image")
         docker_image_tts = Docker("TTS Image")
