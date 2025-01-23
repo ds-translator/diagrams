@@ -1,10 +1,10 @@
 from diagrams import Diagram, Cluster, Edge
 from diagrams.aws.compute import EKS, ECS
 from diagrams.aws.network import ELB, VPC
-from diagrams.aws.devtools import Codecommit  # Using Codecommit to symbolize repositories
-from diagrams.onprem.container import Docker  # Using Docker to represent the Docker image build process
-from diagrams.generic.blank import Blank  # Use a Blank node for custom labeling if needed
-from diagrams.onprem.client import Client, User  # Representing the user and the web browser
+from diagrams.aws.devtools import Codecommit
+from diagrams.onprem.container import Docker
+from diagrams.generic.blank import Blank
+from diagrams.onprem.client import Client, User, Users
 from diagrams.onprem.ci import GithubActions
 from diagrams.aws.security import IdentityAndAccessManagementIamAddOn
 from diagrams.oci.security import IDAccess
@@ -14,34 +14,59 @@ from diagrams.oci.devops import APIService
 from diagrams.aws.storage import SimpleStorageServiceS3 as S3
 from diagrams.aws.management import AmazonManagedPrometheus as Prometheus, AmazonManagedGrafana as Grafana
 
+class Services:
+    def __init__(self):
+        self.http = APIService("HTTP")
+        self.websocket = APIService("Websocket")
+        self.stt = APIService("STT")
+        self.translate = APIService("Translate")
+        self.tts = APIService("TTS")
+
+class Nodegroups:
+    def __init__(self):
+        self.frontend = APIService("Frontend (Nginx)")
+        self.backend = APIService("Backend (Python)")
+        self.whisper = APIService("Whisper")
+        self.libretranslate = APIService("Libretranslate")
+        self.tts = APIService("TTS")   
+
+class Images:
+    def __init__(self):
+        self.frontend = Docker("Frontend Image (Nginx)")
+        self.backend = Docker("Backend Image (Python)")
+        self.stt = Docker("Whisper Image")
+        self.translate = Docker("Libretranslate Image")
+        self.tts = Docker("TTS Image")
+
+class Repos:
+    def __init__(self):
+        self.frontend = Codecommit("Repo Frontend UI")
+        self.backend = Codecommit("Repo Backend Server")
+        self.infra = Codecommit("Repo Terraform Infrastructure")
 
 with Diagram("AWS EKS Cluster", show=False):
     
-    user = User("End User")
+    user = Users("End Users")
     browser = Client("Web Browser")    
     terraform = Terraform("IaC")
-    devops_engineer = User("DevOps Engineer")
+    devops_engineer = Users("DevOps Engineers")
+    developers = Users("Developers")
 
-
-
-    # Repositories for the Frontend, Backend, and Terraform
     with Cluster("GitHub"):
-        repo_frontend = Codecommit("Repo Frontend UI")
-        repo_backend = Codecommit("Repo Backend Server")
-        repo_infra = Codecommit("Repo Terraform Infrastructure")
+        repos = Repos()
         
         github_actions_frontend = GithubActions("test and build Frontend")
         github_actions_backend = GithubActions("test and build Backend")
 
-    # Docker image build processes
     with Cluster("Docker Hub"):
-        docker_image_frontend = Docker("Frontend Image (Nginx)")
-        docker_image_backend = Docker("Backend Image (Python)")
-        docker_image_stt = Docker("Whisper Image")
-        docker_image_translate = Docker("Libretranslate Image")
-        docker_image_tts = Docker("TTS Image")
+        images = Images()
+        
+        images.frontend >> Edge(style='invis') \
+        >> images.backend >> Edge(style='invis') \
+        >> images.stt >> Edge(style='invis') \
+        >> images.translate >> Edge(style='invis') \
+        >> images.tts
 
-    # Optional: Representing Load Balancer if necessary
     with Cluster("AWS"):
         cluster_entry = Blank("")
         vpc = VPC("AWS VPC")
@@ -52,64 +77,60 @@ with Diagram("AWS EKS Cluster", show=False):
         with Cluster("Monitoring"):
             prometheus = Prometheus("Prometheus")
             grafana = Grafana("Grafana")
-            # monitoring = Blank("Monitoring")
-
-
+    
         with Cluster("EKS Cluster"):
             
             lb = ELB("Load Balancer")
         
-            with Cluster("Nodegroup Frontend"):
-                frontend = BM("Frontend with NginX")
-            with Cluster("Nodegroup Backend"):
-                backend = BM("Backend Server")    
-            with Cluster("Nodegroup STT (GPU)"):
-                whisper = BM("Whisper")
-            with Cluster("Nodegroup Translation (GPU)"):
-                libretranslate = BM("Libretranslate")
-            with Cluster("Nodegroup TTS (GPU)"):
-                tts = BM("TTS")
+            ng = Nodegroups()
+            
+            ng.frontend >> Edge(style='invis') \
+            >> ng.backend >> Edge(style='invis') \
+            >> ng.whisper >> Edge(style='invis') \
+            >> ng.libretranslate >> Edge(style='invis') \
+            >> ng.tts >> Edge(style='invis')
 
             with Cluster("Cluster services"):
-                service_tts = APIService("TTS-Service")
-                service_translate = APIService("Translation-Service")
-                service_stt = APIService("STT-Service")   
-                service_websocket = APIService("Websocket-Service") 
-                service_http = APIService("HTTP-Service") 
+                services = Services()
 
+            services.http >> Edge(style='invis') \
+            >> services.websocket >> Edge(style='invis') \
+            >> services.stt >> Edge(style='invis') \
+            >> services.translate >> Edge(style='invis') \
+            >> services.tts >> Edge(style='invis')
 
     with Cluster("AWS Region 2"):
         backup_s3 = S3("Backup")
 
-    # Link repositories to their related components
-    repo_frontend >> github_actions_frontend >> docker_image_frontend >> frontend  # Frontend UI
-    repo_backend >> github_actions_backend >> docker_image_backend >> backend  # Backend Server
+    repos.frontend >> github_actions_frontend >> images.frontend >> ng.frontend  # Frontend UI
+    repos.backend >> github_actions_backend >> images.backend >> ng.backend  # Backend Server
 
-    docker_image_stt >> whisper
-    docker_image_translate >> libretranslate
-    docker_image_tts >> tts
+    images.stt >> ng.whisper
+    images.translate >> ng.libretranslate
+    images.tts >> ng.tts
 
-    repo_frontend >> backup_s3  # Frontend UI
-    repo_backend >> backup_s3
-    repo_infra >> backup_s3
+    repos.frontend >> backup_s3  # Frontend UI
+    repos.backend >> backup_s3
+    repos.infra >> backup_s3
 
     # Linking the Terraform infrastructure repo to the cluster indirectly
-    devops_engineer >> repo_infra >> terraform >> cluster_entry  # Representing that the Terraform manages broader infrastructure
+    devops_engineer >> repos.infra >> terraform >> cluster_entry  # Representing that the Terraform manages broader infrastructure
 
     # monitoring >> github_actions_frontend
     # monitoring >> github_actions_backend
     # monitoring >> terraform
 
-    backend >> service_stt
-    backend >> service_translate
-    backend >> service_tts
-    lb >> service_http
-    lb >> service_websocket
+    ng.backend >> services.stt
+    ng.backend >> services.translate
+    ng.backend >> services.tts
+    lb >> services.http
+    lb >> services.websocket
 
-    service_websocket >> backend
-    service_http >> frontend
+    # service_websocket >> backend
+    # service_http >> frontend
     
-
+    developers >> repos.frontend
+    developers >> repos.backend
     
     user >> browser << Edge(label="HTTPS") >> vpc << Edge(label="Websockets") >> lb
 
